@@ -12,6 +12,24 @@ class Puppet::Provider::Openstack < Puppet::Provider
   initvars # so commands will work
   commands :openstack => 'openstack'
 
+  def request(service, action, object, credentials, *properties)
+    if password_credentials_set?(credentials)
+      auth_args = password_auth_args(credentials)
+    elsif openrc_set?(credentials)
+      credentials = get_credentials_from_openrc(credentials['openrc'])
+      auth_args = password_auth_args(credentials)
+    elsif service_credentials_set?(credentials)
+      auth_args = token_auth_args(credentials)
+    elsif env_vars_set?
+      # noop; auth needs no extra arguments
+      auth_args = nil
+    else  # All authentication efforts failed
+      raise(Puppet::Error::OpenstackAuthInputError, 'No credentials provided.')
+    end
+    args = [object, properties, auth_args].flatten.compact.reject(&:empty?)
+    authenticate_request(service, action, args)
+  end
+
   # Returns an array of hashes, where the keys are the downcased CSV headers
   # with underscores instead of spaces
   def self.request(service, action, properties, credentials=nil)
